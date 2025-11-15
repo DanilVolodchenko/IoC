@@ -8,8 +8,8 @@ from resolver import DependencyResolver
 
 
 class InitCommand(ICommand):
-    scope = {}
-    local_scope = threading.local()
+    main_scope = {}
+    current_scope = threading.local()
     _lock = threading.RLock()
     _is_executed = False
 
@@ -18,42 +18,51 @@ class InitCommand(ICommand):
             return
 
         with self._lock:
-            self.scope['IoC.Scope.Empty'] = lambda: {}
-            self.scope['IoC.Scope.Create'] = lambda *args: self.create_scope(args)
-            self.scope['IoC.Scope.Parent'] = lambda *args: self.parent_scope()
-            self.scope['IoC.Scope.Set'] = lambda *args: SetScopeCommand(args[0])
-            self.scope['IoC.Scope.Current'] = lambda *args: SetScopeCommand(args[0])
-            self.scope['IoC.Register'] = lambda *args: RegisterDependencyCommand(args[0], args[1])
-            self.scope['IoC.Scopes.Scope'] = lambda *args: self.scope
-            self.scope['IoC.Scopes.LocalScope'] = lambda *args: self.local_scope
-            self.scope['IoC.Scopes.LocalScope.Empty'] = lambda: EmptyLocalScopeCommand()
+            self.main_scope['IoC.Scope.Empty'] = lambda *args: {}
+            self.main_scope['IoC.Scope.Create'] = lambda *args: self.create_new_scope(*args)
+            self.main_scope['IoC.Scope.Parent'] = lambda *args: self.get_parent_scope()
+            self.main_scope['IoC.Scope.Set'] = lambda *args: SetCurrentScopeCommand(args[0])
+            self.main_scope['IoC.Scope.Current'] = lambda *args: self.get_current_scope()
+            self.main_scope['IoC.Register'] = lambda *args: RegisterDependencyCommand(args[0], args[1])
+            self.main_scope['IoC.Scopes.Main.Scope'] = lambda *args: self.main_scope
+            self.main_scope['IoC.Scopes.Current.Scope'] = lambda *args: self.current_scope
 
             IoC[ICommand].resolve(
-                'UpdateStrategy', DependencyResolver(self.scope, self.local_scope).resolve
+                'UpdateStrategy', DependencyResolver(self).resolve
             ).execute()
 
-            print(IoC.strategy)
             self._is_executed = True
 
-    def create_scope(self, *args) -> dict:
+    def create_new_scope(self, *args) -> dict:
         new_scope = IoC[dict].resolve('IoC.Scope.Empty')
 
         if args:
             parent_scope = args[0]
         else:
             parent_scope = IoC[dict].resolve('IoC.Scope.Current')
-        new_scope['IoC.Scope.Parent'] = parent_scope
+        new_scope['IoC.Scope.Parent'] = lambda *args: parent_scope
 
         return new_scope
 
+    def set_current_scope(self, scope: dict) -> None:
+        self.current_scope.value = scope
+
     def get_parent_scope(self) -> NoReturn:
-        raise ValueError('Root scope has not parent scope')
+        raise AttributeError('Root scope has not parent scope')
 
     def get_current_scope(self):
         try:
-            return IoC[threading.local].resolve('IoC.Scopes.LocalScope').value
+            return self.current_scope.value
         except AttributeError:
-            return IoC[dict].resolve('IoC.Scopes.Scope')
+            return self.main_scope
+
+
+class SetCurrentScopeCommand(ICommand):
+    def __init__(self, scope: dict) -> None:
+        self.scope = scope
+
+    def execute(self) -> None:
+        InitCommand.current_scope.value = self.scope
 
 
 class RegisterDependencyCommand(ICommand):
@@ -62,14 +71,13 @@ class RegisterDependencyCommand(ICommand):
         self.strategy = strategy
 
     def execute(self) -> None:
-        local_scope = IoC[threading.local].resolve('IoC.Scopes.LocalScope')
-        scope = IoC[dict].resolve('IoC.Scopes.Scope')
+        current_scope = IoC[threading.local].resolve('IoC.Scopes.Current.Scope')
+        main_scope = IoC[dict].resolve('IoC.Scopes.Main.Scope')
 
         try:
-            scope[local_scope.value] = {}
-            scope[local_scope.value][self.dependency] = self.strategy
+            current_scope.value[self.dependency] = self.strategy
         except AttributeError:
-            scope[self.dependency] = self.strategy
+            main_scope[self.dependency] = self.strategy
 
 
 class SetScopeCommand(ICommand):
@@ -77,16 +85,5 @@ class SetScopeCommand(ICommand):
         self.scope = scope
 
     def execute(self) -> None:
-        local_scope = IoC[threading.local].resolve('IoC.Scopes.LocalScope')
+        local_scope = IoC[threading.local].resolve('IoC.Scopes.Current.Scope')
         local_scope.value = self.scope
-
-
-class EmptyLocalScopeCommand(ICommand):
-    def execute(self) -> None:
-        local_scope = IoC[threading.local].resolve('IoC.Scopes.LocalScope')
-        del local_scope.value
-
-
-# нужно чтобы в local_scope (лучше в current_scope) находились текущие зависимости и ссылка на родительский scope
-# а в самом scope все зависимости который регаются при запуске InitCommand.execute()
-# и когда приходится искать зависимости, то по цепочке проходить текущий и вложенные скопы

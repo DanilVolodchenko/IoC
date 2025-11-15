@@ -2,13 +2,13 @@ import pytest
 
 
 @pytest.fixture
-def mock_command():
+def mock_example_command():
     class ExampleCommand:
         def __init__(self, a):
             self.a = a
 
         def execute(self):
-            self.a = 1234
+            return self.a
 
     return ExampleCommand
 

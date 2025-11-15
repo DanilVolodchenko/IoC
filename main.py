@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 from interfaces import ICommand
 from ioc import IoC
 from commands import InitCommand
@@ -8,7 +10,7 @@ class ExampleCommand:
         self.a = a
 
     def execute(self):
-        self.a = 1234
+        print(self.a)
 
 
 if __name__ == '__main__':
@@ -33,13 +35,17 @@ if __name__ == '__main__':
 
     # current_scope = IoC[ICommand].resolve('IoC.Scope.Create')
 
-    scope1 = IoC[ICommand].resolve('IoC.Scope.Create')
-    scope2 = IoC[ICommand].resolve('IoC.Scope.Create')
-
-    IoC[ICommand].resolve('IoC.Scope.Set', scope1)
+    scope1 = IoC[Callable].resolve('IoC.Scope.Create')
+    # scope2 = IoC[Callable].resolve('IoC.Scope.Create')
+    IoC[ICommand].resolve('IoC.Scope.Set', scope1).execute()
+    # IoC.resolve('IoC.Scope.Parent')
     IoC[ICommand].resolve('IoC.Register', 'ExampleCommand1', lambda a: ExampleCommand(a)).execute()
     ex_cmd1 = IoC[ICommand].resolve('ExampleCommand1', 1)
-
-    IoC[ICommand].resolve('IoC.Scope.Set', scope2)
-    IoC[ICommand].resolve('IoC.Register', 'ExampleCommand2', lambda a: ExampleCommand(a)).execute()
-    ex_cmd2 = IoC[ICommand].resolve('ExampleCommand2', 5)
+    print(ex_cmd1.execute())
+    IoC[ICommand].resolve('IoC.Scope.Set', scope1).execute()
+    IoC[ICommand].resolve('IoC.Register', 'ExampleCommand1', lambda a: ExampleCommand(a)).execute()
+    ex_cmd1 = IoC[ICommand].resolve('ExampleCommand1', 4)
+    print(ex_cmd1.execute())
+    # IoC[ICommand].resolve('IoC.Scope.Set', scope2)
+    # IoC[ICommand].resolve('IoC.Register', 'ExampleCommand2', lambda a: ExampleCommand(a)).execute()
+    # ex_cmd2 = IoC[ICommand].resolve('ExampleCommand2', 5)

@@ -1,24 +1,27 @@
-import threading
+from typing import TYPE_CHECKING
 
 from interfaces import IResolver
 
+if TYPE_CHECKING:
+    from commands import InitCommand
+
 
 class DependencyResolver(IResolver):
-    def __init__(self, scope: dict, local_scope: threading.local):
-        self.scope = scope
-        self.local_scope = local_scope
+    def __init__(self, init_command: 'InitCommand') -> None:
+        self.init_command = init_command
 
     def resolve(self, dependency: str, *args):
         try:
-            if dependency.startswith('IoC.'):
-                return self.scope[dependency](*args)
+            scope: dict = self.init_command.current_scope.value
+        except AttributeError:
+            scope: dict = self.init_command.main_scope
+
+        while True:
+            depend = scope.get(dependency)
+            if depend:
+                return depend(*args)
+
             try:
-                self.local_scope.value
+                scope = scope['IoC.Scope.Parent'](*args)
             except AttributeError:
-                return self.scope[dependency](*args)
-
-            return self.scope[self.local_scope.value][dependency](*args)
-
-
-        except KeyError:
-            raise Exception(f'Зависимость {dependency} не была найдена')
+                raise Exception(f'Зависимость {dependency} не была найдена')
