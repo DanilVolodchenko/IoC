@@ -78,12 +78,3 @@ class RegisterDependencyCommand(ICommand):
             current_scope.value[self.dependency] = self.strategy
         except AttributeError:
             main_scope[self.dependency] = self.strategy
-
-
-class SetScopeCommand(ICommand):
-    def __init__(self, scope: dict) -> None:
-        self.scope = scope
-
-    def execute(self) -> None:
-        local_scope = IoC[threading.local].resolve('IoC.Scopes.Current.Scope')
-        local_scope.value = self.scope
